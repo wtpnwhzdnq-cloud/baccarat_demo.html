@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#10251e">
+<title>バカラ自動シミュレーター</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1713;--panel:#142820;--line:#2b493c;--text:#f3f7f4;--muted:#afc2b7;--green:#77d6a0;--red:#ff8b8b;--gold:#f2ce79}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(160deg,#10251e,#09120f 65%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:18px 14px 34px}
+main{max-width:620px;margin:auto}
+header{text-align:center;padding:12px 4px 18px}
+h1{font-size:25px;margin:6px 0 8px}p{color:var(--muted);line-height:1.55;margin:6px 0}
+.tag{display:inline-block;background:#203b2e;color:var(--green);padding:5px 10px;border-radius:999px;font-size:12px;font-weight:700}
+.panel{background:rgba(20,40,32,.96);border:1px solid var(--line);border-radius:17px;padding:16px;margin:12px 0}
+h2{font-size:16px;margin:0 0 13px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.stat{background:#0e1d17;border:1px solid var(--line);border-radius:12px;padding:12px}
+.stat small{display:block;color:var(--muted);margin-bottom:5px}
+.stat strong{font-size:21px;overflow-wrap:anywhere}
+label{display:block;color:var(--muted);font-size:13px;margin:12px 0 6px}
+input,select{width:100%;border:1px solid #42604f;background:#0b1713;color:var(--text);border-radius:10px;padding:12px;font-size:16px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{border:0;border-radius:11px;padding:13px 12px;font-size:15px;font-weight:750;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+.primary{background:var(--green);color:#092016;width:100%;margin-top:13px}
+.secondary{background:#294638;color:var(--text);width:100%}
+.danger{background:#492a2a;color:#ffdede;width:100%}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
+.table{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.outcome{border-radius:13px;padding:14px;text-align:center;background:#0e1d17;border:1px solid var(--line)}
+.outcome strong{font-size:20px;display:block;margin:5px 0}
+.history{display:flex;flex-direction:column;gap:7px}
+.item{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:8px 0;font-size:13px}
+.win{color:var(--green)}.loss{color:var(--red)}.tie{color:var(--gold)}
+.note{font-size:12px;color:var(--muted)}
+#status{padding:10px;border-radius:10px;background:#0e1d17;margin-top:12px;font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+<header>
+<span class="tag">仮想資金のみ · デモ版</span>
+<h1>🎴 バカラ自動シミュレーター</h1>
+<p>マーチンゲールの動きと、連敗時の資金変化を体験しよう。</p>
+</header>
+
+<section class="panel">
+<h2>1. ゲーム設定</h2>
+<div class="row">
+<div><label for="starting">初期資金（仮想）</label><input id="starting" type="number" min="100" step="100" value="20000"></div>
+<div><label for="base">初回ベット額</label><input id="base" type="number" min="1" step="10" value="100"></div>
+</div>
+<div class="row">
+<div><label for="limit">損失上限</label><input id="limit" type="number" min="1" step="100" value="5000"></div>
+<div><label for="maxbet">1回の最大ベット</label><input id="maxbet" type="number" min="1" step="100" value="1600"></div>
+</div>
+<label for="side">賭ける側</label>
+<select id="side"><option value="banker">バンカー（勝利時の利益を0.95倍で計算）</option><option value="player">プレイヤー（勝利時の利益を1倍で計算）</option></select>
+<p class="note">簡略化モデルです。実カジノのカード配布・手数料・ルールを完全再現するものではありません。</p>
+<button class="primary" id="start">設定を適用して開始</button>
+</section>
+
+<section class="panel">
+<h2>2. 現在の状態</h2>
+<div class="stats">
+<div class="stat"><small>仮想残高</small><strong id="balance">€200.00</strong></div>
+<div class="stat"><small>今回の収支</small><strong id="profit">€0.00</strong></div>
+<div class="stat"><small>次のベット</small><strong id="next">€1.00</strong></div>
+<div class="stat"><small>連敗数</small><strong id="streak">0</strong></div>
+<div class="stat"><small>ゲーム数</small><strong id="rounds">0</strong></div>
+<div class="stat"><small>勝率（引き分け除く）</small><strong id="rate">—</strong></div>
+</div>
+<div id="status" role="status">設定を適用して開始してください。</div>
+</section>
+
+<section class="panel">
+<h2>3. 自動プレイ</h2>
+<div class="table">
+<div class="outcome"><small>今回の結果</small><strong id="result">—</strong><span class="note" id="resultDetail">まだゲームは始まっていません</span></div>
+<div class="outcome"><small>賭けた金額</small><strong id="betNow">—</strong><span class="note" id="betSide">—</span></div>
+</div>
+<div class="actions">
+<button class="secondary" id="one" disabled>1ゲーム実行</button>
+<button class="secondary" id="auto" disabled>自動プレイ開始</button>
+<button class="secondary" id="pause" disabled>一時停止</button>
+<button class="danger" id="reset">リセット</button>
+</div>
+<p class="note">自動プレイはこの画面内だけで動きます。ページを閉じると停止します。</p>
+</section>
+
+<section class="panel">
+<h2>4. 直近の履歴</h2>
+<div id="history" class="history"><p>まだ履歴はありません。</p></div>
+<button class="secondary" id="clearHistory" style="margin-top:12px">履歴を消去</button>
+</section>
+
+<section class="panel">
+<h2>マーチンゲールのルール</h2>
+<p>・勝ち：次のベットを初回額に戻す</p>
+<p>・負け：次のベットを2倍にする</p>
+<p>・引き分け：このデモでは賭け額を維持する</p>
+<p>・損失上限、残高不足、最大ベット額のいずれかに達したら自動停止</p>
+<p class="note">賭け額を倍にしても勝率は上がりません。連敗時には資金が急速に減るため、これは戦略の検証用であり、利益を保証するものではありません。</p>
+</section>
+</main>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const money = n => '€' + (n / 100).toFixed(2);
+let initial = 20000, balance = initial, base = 100, nextBet = base;
+let lossLimit = 5000, maxBet = 1600, side = 'banker';
+let rounds = 0, wins = 0, losses = 0, ties = 0, lossStreak = 0;
+let running = false, timer = null, history = [], stopped = true;
+
+function readSettings() {
+  const s = Number($('starting').value);
+  const b = Number($('base').value);
+  const l = Number($('limit').value);
+  const m = Number($('maxbet').value);
+  if (![s,b,l,m].every(Number.isFinite) || s < 100 || b < 1 || l < 1 || m < 1) {
+    $('status').textContent = '設定を確認してください。すべて正の数を入力してください。';
+    return false;
+  }
+  initial = Math.round(s); balance = initial; base = Math.round(b);
+  lossLimit = Math.round(l); maxBet = Math.round(m);
+  side = $('side').value; nextBet = base;
+  rounds = wins = losses = ties = lossStreak = 0;
+  history = []; running = false; stopped = false;
+  stopTimer(); $('result').textContent = '—'; $('resultDetail').textContent = 'ゲーム開始待ち';
+  $('betNow').textContent = '—'; $('betSide').textContent = '—';
+  $('status').textContent = '準備完了。1ゲーム実行か自動プレイ開始を押してください。';
+  $('one').disabled = false; $('auto').disabled = false; $('pause').disabled = true;
+  render(); return true;
+}
+function stopTimer() { if (timer !== null) clearInterval(timer); timer = null; running = false; }
+function stop(message) {
+  stopTimer(); stopped = true;
+  $('one').disabled = true; $('auto').disabled = true; $('pause').disabled = true;
+  $('status').textContent = message;
+}
+function render() {
+  $('balance').textContent = money(balance);
+  $('profit').textContent = (balance - initial >= 0 ? '+' : '−') + money(Math.abs(balance - initial));
+  $('next').textContent = money(nextBet);
+  $('streak').textContent = String(lossStreak);
+  $('rounds').textContent = String(rounds);
+  const decided = wins + losses;
+  $('rate').textContent = decided ? (wins / decided * 100).toFixed(1) + '%' : '—';
+  $('history').innerHTML = history.length ? history.map(h =>
+    `<div class="item"><span>#${h.n}　${h.result}（${h.side}）<br>賭け額 ${money(h.bet)}</span><strong class="${h.cls}">${h.change >= 0 ? '+' : '−'}${money(Math.abs(h.change))}</strong></div>`
+  ).join('') : '<p>まだ履歴はありません。</p>';
+}
+function playOne() {
+  if (stopped || balance <= 0) { stop('残高がありません。リセットして新しいデモを始めてください。'); return; }
+  if (balance - initial <= -lossLimit) { stop('設定した損失上限に達したため停止しました。'); return; }
+  if (nextBet > maxBet) { stop('次のベット額が設定した最大額を超えたため停止しました。'); return; }
+  if (nextBet > balance) { stop('残高が次のベット額を下回ったため停止しました。'); return; }
+
+  const bet = nextBet;
+  // 簡易モデル：バンカー45.86%、プレイヤー44.62%、引き分け9.52%。
+  // カードを実際に配るモデルではなく、結果確率の簡易抽選です。
+  const r = Math.random();
+  let result;
+  if (r < 0.0952) result = '引き分け';
+  else if (r < 0.0952 + (side === 'banker' ? 0.4462 : 0.4586)) result = side === 'banker' ? 'プレイヤー勝ち' : 'バンカー勝ち';
+  else result = side === 'banker' ? 'バンカー勝ち' : 'プレイヤー勝ち';
+
+  let change = 0, cls = 'tie';
+  rounds++;
+  if (result === '引き分け') {
+    ties++; cls = 'tie';
+  } else if ((side === 'banker' && result === 'バンカー勝ち') || (side === 'player' && result === 'プレイヤー勝ち')) {
+    wins++; lossStreak = 0;
+    change = Math.round(bet * (side === 'banker' ? 0.95 : 1));
+    balance += change; nextBet = base; cls = 'win';
+  } else {
+    losses++; lossStreak++;
+    change = -bet; balance += change;
+    nextBet = bet * 2; cls = 'loss';
+  }
+  $('result').textContent = result;
+  $('result').className = cls;
+  $('resultDetail').textContent = 'ゲーム #' + rounds;
+  $('betNow').textContent = money(bet);
+  $('betSide').textContent = side === 'banker' ? 'バンカーに賭ける' : 'プレイヤーに賭ける';
+  history.unshift({n:rounds,result,side:side === 'banker' ? 'バンカー' : 'プレイヤー',bet,change,cls});
+  history = history.slice(0,20);
+  $('status').textContent = result === '引き分け' ? '引き分け：このデモでは賭け額を維持します。' : (change > 0 ? '勝ち：初回ベット額に戻しました。' : '負け：次のベット額を2倍にしました。');
+  render();
+  if (balance - initial <= -lossLimit) stop('損失上限に達したため停止しました。');
+  else if (nextBet > maxBet) stop('次のベット額が最大ベット額を超えたため停止しました。');
+  else if (nextBet > balance) stop('残高不足のため停止しました。');
+}
+$('start').addEventListener('click', readSettings);
+$('one').addEventListener('click', playOne);
+$('auto').addEventListener('click', () => {
+  if (stopped) return;
+  running = true; $('auto').disabled = true; $('one').disabled = true; $('pause').disabled = false;
+  $('status').textContent = '自動プレイ中です。';
+  timer = setInterval(() => { if (!stopped) playOne(); }, 650);
+});
+$('pause').addEventListener('click', () => {
+  stopTimer(); $('one').disabled = false; $('auto').disabled = false; $('pause').disabled = true;
+  $('status').textContent = '一時停止中です。';
+});
+$('reset').addEventListener('click', () => {
+  stopTimer(); stopped = true;
+  initial = 20000; balance = initial; base = 100; nextBet = base; lossLimit = 5000; maxBet = 1600; side = 'banker';
+  rounds = wins = losses = ties = lossStreak = 0; history = [];
+  $('starting').value = 20000; $('base').value = 100; $('limit').value = 5000; $('maxbet').value = 1600; $('side').value = 'banker';
+  $('one').disabled = true; $('auto').disabled = true; $('pause').disabled = true;
+  $('result').textContent = '—'; $('resultDetail').textContent = 'まだゲームは始まっていません'; $('betNow').textContent = '—'; $('betSide').textContent = '—';
+  $('status').textContent = 'リセットしました。設定を適用して開始してください。'; render();
+});
+$('clearHistory').addEventListener('click', () => { history = []; render(); });
+render();
+})();
+</script>
+</body>
+</html>
